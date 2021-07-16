@@ -8,8 +8,6 @@ mod web;
 pub use cache::{Cache, CacheEntry};
 pub use context::{BasicContext, Context};
 pub use filesystem::{check_filesystem, resolve_link, Options};
-#[allow(deprecated)]
-pub use web::get;
 pub use web::{check_web, head};
 
 use crate::{Category, Link};
@@ -29,6 +27,9 @@ pub enum Reason {
     /// The HTTP client returned an error.
     #[error("The web client encountered an error")]
     Web(#[from] reqwest::Error),
+    /// The DOM doesn't contain the fragment.
+    #[error("The web page exists, but not the anchor")]
+    Dom,
 }
 
 impl Reason {

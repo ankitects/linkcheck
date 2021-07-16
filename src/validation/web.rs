@@ -1,19 +1,22 @@
 use crate::validation::{CacheEntry, Context, Reason};
 use http::HeaderMap;
-use reqwest::{Client, Url};
+use kuchiki::parse_html;
+use kuchiki::traits::TendrilSink;
+use reqwest::{Client, Response, Url};
 use std::time::SystemTime;
 
-#[deprecated]
-/// Send a HEAD request to a particular endpoint.
-///
-/// This function is deprecated in favor of [`head`].
+/// Send a GET request to a particular endpoint.
 pub async fn get(
     client: &Client,
     url: Url,
     extra_headers: HeaderMap,
-) -> Result<(), reqwest::Error> {
-    head(client, url, extra_headers).await?;
-    Ok(())
+) -> Result<Response, reqwest::Error> {
+    client
+        .get(url)
+        .headers(extra_headers)
+        .send()
+        .await?
+        .error_for_status()
 }
 
 /// Send a HEAD request to a particular endpoint.
@@ -44,18 +47,28 @@ where
         return Ok(());
     }
 
-    let result =
-        head(ctx.client(), url.clone(), ctx.url_specific_headers(&url)).await;
-
-    if let Some(fragment) = url.fragment() {
-        // TODO: check the fragment
-        log::warn!("Fragment checking isn't implemented, not checking if there is a \"{}\" header in \"{}\"", fragment, url);
-    }
+    let result = if let Some(fragment) = url.fragment() {
+        log::debug!("Checking \"{}\" contains \"{}\"", url, fragment);
+        let response =
+            get(ctx.client(), url.clone(), ctx.url_specific_headers(&url))
+                .await?;
+        let document = parse_html()
+            .from_utf8()
+            .read_from(&mut response.text().await?.as_bytes())?;
+        document
+            .select_first(&format!("#{}", fragment))
+            .map(|_| ())
+            .map_err(|_| Reason::Dom)
+    } else {
+        head(ctx.client(), url.clone(), ctx.url_specific_headers(&url))
+            .await
+            .map_err(Reason::from)
+    };
 
     let entry = CacheEntry::new(SystemTime::now(), result.is_ok());
     update_cache(url, ctx, entry);
 
-    result.map_err(Reason::from)
+    result
 }
 
 fn already_valid<C>(url: &Url, ctx: &C) -> bool
