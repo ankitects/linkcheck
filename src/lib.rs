@@ -79,7 +79,7 @@ pub use validation::{validate, BasicContext};
 
 use codespan::{FileId, Span};
 use http::uri::PathAndQuery;
-use std::path::PathBuf;
+use std::{ffi::OsString, path::PathBuf};
 use url::Url;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -123,7 +123,7 @@ impl Category {
             Some(hash) => {
                 let (path, rest) = src.split_at(hash);
                 (path, Some(String::from(&rest[1..])))
-            },
+            }
             None => (src, None),
         };
 
@@ -151,19 +151,29 @@ pub struct Link {
     pub span: Span,
     /// Which document does this [`Link`] belong to?
     pub file: FileId,
+    /// Which document does this [`Link`] belong to?
+    pub file_name: OsString,
 }
 
 impl Link {
     /// Create a new [`Link`].
-    pub fn new<S: Into<String>>(href: S, span: Span, file: FileId) -> Self {
+    pub fn new<S: Into<String>>(
+        href: S,
+        span: Span,
+        file: FileId,
+        file_name: OsString,
+    ) -> Self {
         Link {
             href: href.into(),
             span,
             file,
+            file_name,
         }
     }
 
-    fn category(&self) -> Option<Category> { Category::categorise(&self.href) }
+    fn category(&self) -> Option<Category> {
+        Category::categorise(&self.href)
+    }
 }
 
 #[cfg(test)]

@@ -12,7 +12,7 @@ pub use web::{check_web, head};
 
 use crate::{Category, Link};
 use futures::{Future, StreamExt};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Possible reasons for a bad link.
 #[derive(Debug, thiserror::Error)]
@@ -24,6 +24,9 @@ pub enum Reason {
     /// The OS returned an error (e.g. file not found).
     #[error("An OS-level error occurred")]
     Io(#[from] std::io::Error),
+    /// The file doesn't contain the fragment.
+    #[error("The file exists, but not the anchor")]
+    File,
     /// The HTTP client returned an error.
     #[error("The web client encountered an error")]
     Web(#[from] reqwest::Error),
@@ -93,19 +96,17 @@ where
             ),
         ),
         Some(Category::CurrentFile { fragment }) => {
-            // TODO: How do we want to validate links to other parts of the
-            // current file?
-            //
-            // It seems wasteful to go through the whole filesystem resolution
-            // process when the filename was recorded when adding its text to
-            // `Files`... Maybe we could thread `Files` through and then join it
-            // with `ctx.filesystem_options().root_directory()`?
-            log::warn!("Not checking \"{}\" in the current file because fragment resolution isn't implemented", fragment);
-            Outcome::Ignored(link)
-        },
+            let res = check_filesystem(
+                current_directory,
+                &PathBuf::from(&link.file_name),
+                Some(&fragment),
+                ctx,
+            );
+            Outcome::from_result(link, res)
+        }
         Some(Category::Url(url)) => {
             Outcome::from_result(link, check_web(&url, ctx).await)
-        },
+        }
         Some(Category::MailTo(_)) => Outcome::Ignored(link),
         None => Outcome::UnknownCategory(link),
     }
@@ -126,7 +127,9 @@ pub struct Outcomes {
 
 impl Outcomes {
     /// Create an empty set of [`Outcomes`].
-    pub fn empty() -> Self { Outcomes::default() }
+    pub fn empty() -> Self {
+        Outcomes::default()
+    }
 
     /// Merge two [`Outcomes`].
     pub fn merge(&mut self, other: Outcomes) {

@@ -1,4 +1,6 @@
 use crate::validation::{Context, Reason};
+use lazy_static::lazy_static;
+use regex::Regex;
 use std::{
     collections::HashMap,
     ffi::{OsStr, OsString},
@@ -102,12 +104,8 @@ where
     );
 
     if let Some(fragment) = fragment {
-        // TODO: detect the file type and check the fragment exists
-        log::warn!(
-            "Not checking that the \"{}\" section exists in \"{}\" because fragment resolution isn't implemented",
-            fragment,
-            resolved_location.display(),
-        );
+        let source = std::fs::read_to_string(&resolved_location.as_path())?;
+        check_fragment_in_md_source(&source, fragment)?;
     }
 
     if let Err(reason) =
@@ -122,6 +120,65 @@ where
     }
 
     Ok(())
+}
+
+fn check_fragment_in_md_source(
+    source: &str,
+    fragment: &str,
+) -> Result<(), Reason> {
+    lazy_static! {
+        static ref HEADING: Regex = Regex::new("(?m)^#+ (.+)").unwrap();
+    }
+    for heading in HEADING.captures_iter(&source) {
+        if &id_from_content(&heading[1]) == fragment {
+            return Ok(());
+        }
+    }
+    Err(Reason::File)
+}
+
+// Taken from https://github.com/rust-lang/mdBook/blob/master/src/utils/mod.rs#L30
+fn normalize_id(content: &str) -> String {
+    content
+        .chars()
+        .filter_map(|ch| {
+            if ch.is_alphanumeric() || ch == '_' || ch == '-' {
+                Some(ch.to_ascii_lowercase())
+            } else if ch.is_whitespace() {
+                Some('-')
+            } else {
+                None
+            }
+        })
+        .collect::<String>()
+}
+
+// Taken from https://github.com/rust-lang/mdBook/blob/master/src/utils/mod.rs#L47
+fn id_from_content(content: &str) -> String {
+    let mut content = content.to_string();
+
+    // Skip any tags or html-encoded stuff
+    const REPL_SUB: &[&str] = &[
+        "<em>",
+        "</em>",
+        "<code>",
+        "</code>",
+        "<strong>",
+        "</strong>",
+        "&lt;",
+        "&gt;",
+        "&amp;",
+        "&#39;",
+        "&quot;",
+    ];
+    for sub in REPL_SUB {
+        content = content.replace(sub, "");
+    }
+
+    // Remove spaces and hashes indicating a header
+    let trimmed = content.trim().trim_start_matches('#').trim();
+
+    normalize_id(trimmed)
 }
 
 /// Options to be used with [`resolve_link()`].
@@ -196,7 +253,9 @@ impl Options {
     }
 
     /// The default file name to use when a directory is linked to.
-    pub fn default_file(&self) -> &OsStr { &self.default_file }
+    pub fn default_file(&self) -> &OsStr {
+        &self.default_file
+    }
 
     /// Set the [`Options::default_file()`].
     pub fn set_default_file<O: Into<OsString>>(self, default_file: O) -> Self {
@@ -288,7 +347,7 @@ impl Options {
                     // (e.g. "/" or "C:\")
                     buffer.extend(remove_absolute_components(second));
                     Ok(buffer)
-                },
+                }
                 // You really shouldn't provide links to absolute files on your
                 // system (e.g. "/home/michael/Documents/whatever" or
                 // "/etc/passwd").
@@ -301,7 +360,7 @@ impl Options {
                 None => {
                     log::warn!("The bit to be appended is absolute, but we don't have a \"root\" directory to resolve relative to");
                     Err(Reason::TraversesParentDirectories)
-                },
+                }
             }
         } else {
             Ok(current_dir.join(second))
@@ -397,7 +456,9 @@ fn nop_custom_validation(
 }
 
 impl Default for Options {
-    fn default() -> Self { Options::new() }
+    fn default() -> Self {
+        Options::new()
+    }
 }
 
 impl Debug for Options {
