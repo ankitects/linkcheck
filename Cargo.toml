@@ -29,6 +29,7 @@ dunce = "1.0.0"
 kuchiki = "*"
 regex = "*"
 lazy_static = "*"
+percent-encoding = "2.1.0"
 
 [dev-dependencies]
 tempfile = "3.1.0"

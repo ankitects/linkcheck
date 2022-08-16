@@ -2,6 +2,7 @@ use crate::validation::{CacheEntry, Context, Reason};
 use http::HeaderMap;
 use kuchiki::parse_html;
 use kuchiki::traits::TendrilSink;
+use percent_encoding::percent_decode;
 use reqwest::{Client, Response, Url};
 use std::time::SystemTime;
 
@@ -48,6 +49,7 @@ where
     }
 
     let result = if let Some(fragment) = url.fragment() {
+        let fragment = percent_decode(fragment.as_bytes()).decode_utf8_lossy();
         log::debug!("Checking \"{}\" contains \"{}\"", url, fragment);
         let response =
             get(ctx.client(), url.clone(), ctx.url_specific_headers(&url))
