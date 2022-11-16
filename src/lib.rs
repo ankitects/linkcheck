@@ -30,7 +30,7 @@
 //! // at the moment we just have a stream of (&str, Span)... To give nice
 //! // diagnostics we need to turn this into a stream of Links that know which
 //! // document they came from.
-//! let links = links.map(|(url, span)| Link::new(url, span, file_id));
+//! let links = links.map(|(url, span)| Link::new(url, span, file_id, "".into()));
 //!
 //! // we've collected all our links, now it's time for validation!
 //!
