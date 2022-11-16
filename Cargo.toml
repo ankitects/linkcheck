@@ -29,6 +29,7 @@ dunce = "1.0.0"
 kuchiki = "*"
 regex = "*"
 lazy_static = "*"
+mdbook = "0.4.21"
 
 [dev-dependencies]
 tempfile = "3.1.0"

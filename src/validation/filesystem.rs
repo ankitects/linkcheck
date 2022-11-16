@@ -1,5 +1,6 @@
 use crate::validation::{Context, Reason};
 use lazy_static::lazy_static;
+use mdbook::utils::unique_id_from_content;
 use regex::Regex;
 use std::{
     collections::HashMap,
@@ -129,56 +130,13 @@ fn check_fragment_in_md_source(
     lazy_static! {
         static ref HEADING: Regex = Regex::new("(?m)^#+ (.+)").unwrap();
     }
-    for heading in HEADING.captures_iter(&source) {
-        if &id_from_content(&heading[1]) == fragment {
+    let mut map = HashMap::new();
+    for heading in HEADING.captures_iter(source) {
+        if unique_id_from_content(&heading[1], &mut map) == fragment {
             return Ok(());
         }
     }
     Err(Reason::File)
-}
-
-// Taken from https://github.com/rust-lang/mdBook/blob/master/src/utils/mod.rs#L30
-fn normalize_id(content: &str) -> String {
-    content
-        .chars()
-        .filter_map(|ch| {
-            if ch.is_alphanumeric() || ch == '_' || ch == '-' {
-                Some(ch.to_ascii_lowercase())
-            } else if ch.is_whitespace() {
-                Some('-')
-            } else {
-                None
-            }
-        })
-        .collect::<String>()
-}
-
-// Taken from https://github.com/rust-lang/mdBook/blob/master/src/utils/mod.rs#L47
-fn id_from_content(content: &str) -> String {
-    let mut content = content.to_string();
-
-    // Skip any tags or html-encoded stuff
-    const REPL_SUB: &[&str] = &[
-        "<em>",
-        "</em>",
-        "<code>",
-        "</code>",
-        "<strong>",
-        "</strong>",
-        "&lt;",
-        "&gt;",
-        "&amp;",
-        "&#39;",
-        "&quot;",
-    ];
-    for sub in REPL_SUB {
-        content = content.replace(sub, "");
-    }
-
-    // Remove spaces and hashes indicating a header
-    let trimmed = content.trim().trim_start_matches('#').trim();
-
-    normalize_id(trimmed)
 }
 
 /// Options to be used with [`resolve_link()`].
