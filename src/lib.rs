@@ -123,7 +123,7 @@ impl Category {
             Some(hash) => {
                 let (path, rest) = src.split_at(hash);
                 (path, Some(String::from(&rest[1..])))
-            }
+            },
             None => (src, None),
         };
 

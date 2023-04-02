@@ -1,8 +1,10 @@
 use crate::validation::{CacheEntry, Context, Reason};
+use html5ever::parse_document;
+use html5ever::tendril::TendrilSink;
 use http::HeaderMap;
-use kuchiki::parse_html;
-use kuchiki::traits::TendrilSink;
+use markup5ever_rcdom::{Handle, NodeData, RcDom};
 use reqwest::{Client, Response, Url};
+use std::borrow::Borrow;
 use std::time::SystemTime;
 
 /// Send a GET request to a particular endpoint.
@@ -42,7 +44,7 @@ where
 {
     log::debug!("Checking \"{}\" on the web", url);
 
-    if already_valid(&url, ctx) {
+    if already_valid(url, ctx) {
         log::debug!("The cache says \"{}\" is still valid", url);
         return Ok(());
     }
@@ -50,17 +52,15 @@ where
     let result = if let Some(fragment) = url.fragment() {
         log::debug!("Checking \"{}\" contains \"{}\"", url, fragment);
         let response =
-            get(ctx.client(), url.clone(), ctx.url_specific_headers(&url))
+            get(ctx.client(), url.clone(), ctx.url_specific_headers(url))
                 .await?;
-        let document = parse_html()
-            .from_utf8()
-            .read_from(&mut response.text().await?.as_bytes())?;
-        document
-            .select_first(&format!("#{}", fragment))
-            .map(|_| ())
-            .map_err(|_| Reason::Dom)
+        if element_with_id_exists(response.text().await?.as_bytes(), fragment) {
+            Ok(())
+        } else {
+            Err(Reason::Dom)
+        }
     } else {
-        head(ctx.client(), url.clone(), ctx.url_specific_headers(&url))
+        head(ctx.client(), url.clone(), ctx.url_specific_headers(url))
             .await
             .map_err(Reason::from)
     };
@@ -69,6 +69,31 @@ where
     update_cache(url, ctx, entry);
 
     result
+}
+
+fn element_with_id_exists(mut html: &[u8], id: &str) -> bool {
+    let dom = parse_document(RcDom::default(), Default::default())
+        .from_utf8()
+        .read_from(&mut html)
+        .unwrap();
+    node_has_element_with_id(&dom.document, id)
+}
+
+fn node_has_element_with_id(node: &Handle, id: &str) -> bool {
+    let node_data = node.data.borrow();
+    if let NodeData::Element { ref attrs, .. } = *node_data {
+        if attrs
+            .borrow()
+            .iter()
+            .any(|a| a.name.local.as_ref() == "id" && a.value.as_ref() == id)
+        {
+            return true;
+        }
+    }
+    node.children
+        .borrow()
+        .iter()
+        .any(|child| node_has_element_with_id(child, id))
 }
 
 fn already_valid<C>(url: &Url, ctx: &C) -> bool
